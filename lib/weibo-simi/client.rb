@@ -15,7 +15,7 @@ module WeiboSimi
       @weibo_url = 'http://weibo.cn/pub'
       @login_url = 'http://login.weibo.cn/login/'
       @url = "#{@login_url}?ns=1&revalid=2&backURL=http%3A%2F%2Fweibo.cn%2F&backTitle=%D0%C2%C0%CB%CE%A2%B2%A9&vt="
-      @headers = { 
+      @headers = {
         'User-Agent' => 'Mozilla/5.0 (Windows NT 6.1; rv:18.0) Gecko/20100101 Firefox/18.0',
         'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language' => 'zh-cn,zh;q=0.8,en-us;q=0.5,en;q=0.3',
@@ -47,14 +47,14 @@ module WeiboSimi
         puts '@@@@@@ mainpage error @@@@@@'
         puts e
         puts '@@@@@@ mainpage error @@@@@@'
+        retry
       end
-      
     end
 
     def get_login_post_info(url)
       begin
-        res = RestClient.get URI.encode(url), @headers 
-        doc = Nokogiri::HTML res, nil, 'utf-8' 
+        res = RestClient.get URI.encode(url), @headers
+        doc = Nokogiri::HTML res, nil, 'utf-8'
         action = doc.xpath('//form/@action').first.content
         password = doc.xpath('//input[@type="password"]/@name').first.content
         backURL = doc.xpath('//input[@name="backURL"]/@value').first.content
@@ -67,47 +67,74 @@ module WeiboSimi
         puts e.class
         puts e.backtrace
         puts '****** RC error ******'
+        retry
       end
     end
 
     def login
-      url = get_login_url
-      post_info = get_login_post_info url
-      post_data = {
-        'mobile' => @username,
-        post_info[:password] => @password,
-        'remember' => 'on',
-        'backURL' => URI.encode(post_info[:backURL]),
-        'backTitle' => URI.encode(post_info[:backTitle]),
-        'vk' => post_info[:vk],
-        'submit' => URI.encode(post_info[:submit]),
-        'encoding' => 'utf-8'
-      }
-      url = "#{@login_url}#{post_info[:action]}"
-      res = Net::HTTP.post_form URI(url), post_data
-      res = RestClient::Response.create res.body, res, method: :get
-      res = res.follow_redirection
-      @gsid_CTandWM = res.cookies['gsid_CTandWM']
-      @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}"
-      doc = Nokogiri::HTML res, nil, 'utf-8' 
-      url = doc.xpath('//a/@href').first.content
-      res = RestClient.get url, @headers
-      @weibo_uid = res.cookies['_WEIBO_UID']
-      @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
-      res
+      begin
+        url = get_login_url
+        post_info = get_login_post_info url
+        post_data = {
+          'mobile' => @username,
+          post_info[:password] => @password,
+          'remember' => 'on',
+          'backURL' => URI.encode(post_info[:backURL]),
+          'backTitle' => URI.encode(post_info[:backTitle]),
+          'vk' => post_info[:vk],
+          'submit' => URI.encode(post_info[:submit]),
+          'encoding' => 'utf-8'
+        }
+        url = "#{@login_url}#{post_info[:action]}"
+        res = Net::HTTP.post_form URI(url), post_data
+        res = RestClient::Response.create res.body, res, method: :get
+        res = res.follow_redirection
+        @gsid_CTandWM = res.cookies['gsid_CTandWM']
+        @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}"
+        doc = Nokogiri::HTML res, nil, 'utf-8'
+        url = doc.xpath('//a/@href').first.content
+        res = RestClient.get url, @headers
+        @weibo_uid = res.cookies['_WEIBO_UID']
+        @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
+        res
+      rescue RestClient::RequestTimeout => e
+        puts '****** Request Timeout ******'
+        puts e.class
+        #puts e.backtrace
+        puts '****** Request Timeout ******'
+        retry
+      end
     end
 
     def reply_to_at
       at_url = 'http://weibo.cn/at/weibo'
       @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
-      at_res = RestClient.get at_url, @headers
+      res = nil
+      begin
+        at_res = RestClient.get at_url, @headers
+      rescue RestClient::RequestTimeout => e
+        puts '****** Request Timeout ******'
+        puts e.class
+        #puts e.backtrace
+        puts '****** Request Timeout ******'
+        retry
+      end
       at_doc = Nokogiri::HTML at_res, nil, 'utf-8'
       urls = at_doc.xpath('//a[starts-with(text(),"评论[")]/@href')
       urls.each do |url|
         url = url.content
         unless has_url_in_db? url
           puts "New @"
-          res = RestClient.get url, @headers
+          res = nil
+          begin
+            res = RestClient.get url, @headers
+          rescue RestClient::RequestTimeout => e
+            puts '****** Request Timeout ******'
+            puts e.class
+            #puts e.backtrace
+            puts '****** Request Timeout ******'
+            retry
+          end
           doc = Nokogiri::HTML res, nil, 'utf-8'
           content = doc.xpath('//span[@class="ctt"]').first
           question = ''
@@ -125,9 +152,9 @@ module WeiboSimi
           id = doc.xpath('//input[@name="id"]/@value').first.content
           rl = doc.xpath('//input[@name="rl"]/@value').first.content
           post_data = {
-            'srcuid' => srcuid,
-            'id' => id,
-            'rl' => rl,
+            'srcuid'  => srcuid,
+            'id'      => id,
+            'rl'      => rl,
             'content' => answer
           }
           action = doc.xpath('//form[@method="post"]/@action').first.content
@@ -138,24 +165,41 @@ module WeiboSimi
           req = Net::HTTP::Post.new "#{uri.path}?#{uri.query}"
           req.set_form_data post_data
           @headers.each { |k, v| req[k.to_s] = v.to_s }
-          res = Net::HTTP.start(uri.hostname, uri.port) do |http|
-            http.request req
+          begin
+            res = Net::HTTP.start(uri.hostname, uri.port) do |http|
+              http.request req
+            end
+          rescue Timeout::Error => e
+            puts '****** Request Timeout ******'
+            puts e.class
+            #puts e.backtrace
+            puts '****** Request Timeout ******'
+            retry
           end
 
           if res.code == '302'
             puts "Success #{res}"
-            record_qa id, question, answer 
+            record_qa id, question, answer
           else
             puts "Failed #{res}" if res.code != '302'
           end
         end
       end
     end
-    
+
     def reply_to_comment
       comment_url = 'http://weibo.cn/msg/comment/receive'
       @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
-      res = RestClient.get comment_url, @headers
+      res = nil
+      begin
+        res = RestClient.get comment_url, @headers
+      rescue RestClient::RequestTimeout => e
+        puts '****** Request Timeout ******'
+        puts e.class
+        #puts e.backtrace
+        puts '****** Request Timeout ******'
+        retry
+      end
       doc = Nokogiri::HTML res, nil, 'utf-8'
       new_spans = doc.xpath('//span[text()="[新]"]')
       return if new_spans.empty?
@@ -172,7 +216,16 @@ module WeiboSimi
         reply_node = comment_node
         reply_node = reply_node.next until reply_node['class'] == 'cc'
         reply_url = 'http://weibo.cn' + reply_node.children[0]['href']
-        res = RestClient.get reply_url, @headers
+        res = nil
+        begin
+          res = RestClient.get reply_url, @headers
+        rescue RestClient::RequestTimeout => e
+          puts '****** Request Timeout ******'
+          puts e.class
+          #puts e.backtrace
+          puts '****** Request Timeout ******'
+          retry
+        end
         doc = Nokogiri::HTML res, nil, 'utf-8'
         cmtid = doc.xpath('//input[@name="cmtid"]/@value').first.content
         id = doc.xpath('//input[@name="id"]/@value').first.content
@@ -191,22 +244,40 @@ module WeiboSimi
         req = Net::HTTP::Post.new "#{uri.path}?#{uri.query}"
         req.set_form_data post_data
         @headers.each { |k, v| req[k.to_s] = v.to_s }
-        res = Net::HTTP.start(uri.hostname, uri.port) do |http|
-          http.request req
+        begin
+          res = Net::HTTP.start(uri.hostname, uri.port) do |http|
+            http.request req
+          end
+        rescue RestClient::RequestTimeout => e
+          puts '****** Request Timeout ******'
+          puts e.class
+          #puts e.backtrace
+          puts '****** Request Timeout ******'
+          retry
         end
+        
         if res.code == '302'
           puts "Success #{res}"
-          record_qa '', comment, answer 
+          record_qa '', comment, answer
         else
           puts "Failed #{res}" if res.code != '302'
         end
       end
     end
-    
+
     def reply_to_at_comment
       comment_url = 'http://weibo.cn/at/comment'
       @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
-      res = RestClient.get comment_url, @headers
+      res = nil
+      begin
+        res = RestClient.get comment_url, @headers
+        rescue RestClient::RequestTimeout => e
+        puts '****** Request Timeout ******'
+        puts e.class
+        #puts e.backtrace
+        puts '****** Request Timeout ******'
+        retry
+      end
       doc = Nokogiri::HTML res, nil, 'utf-8'
       new_spans = doc.xpath('//span[text()="[新]"]')
       return if new_spans.empty?
@@ -225,7 +296,16 @@ module WeiboSimi
         reply_node = comment_node
         reply_node = reply_node.next until reply_node['class'] == 'cc'
         reply_url = 'http://weibo.cn' + reply_node.children[0]['href']
-        res = RestClient.get reply_url, @headers
+        res = nil
+        begin
+          res = RestClient.get reply_url, @headers
+        rescue RestClient::RequestTimeout => e
+          puts '****** Request Timeout ******'
+          puts e.class
+          #puts e.backtrace
+          puts '****** Request Timeout ******'
+          retry
+        end
         doc = Nokogiri::HTML res, nil, 'utf-8'
         cmtid = doc.xpath('//input[@name="cmtid"]/@value').first.content
         id = doc.xpath('//input[@name="id"]/@value').first.content
@@ -244,18 +324,26 @@ module WeiboSimi
         req = Net::HTTP::Post.new "#{uri.path}?#{uri.query}"
         req.set_form_data post_data
         @headers.each { |k, v| req[k.to_s] = v.to_s }
-        res = Net::HTTP.start(uri.hostname, uri.port) do |http|
-          http.request req
+        begin
+          res = Net::HTTP.start(uri.hostname, uri.port) do |http|
+            http.request req
+          end
+        rescue RestClient::RequestTimeout => e
+          puts '****** Request Timeout ******'
+          puts e.class
+          #puts e.backtrace
+          puts '****** Request Timeout ******'
+          retry
         end
         if res.code == '302'
           puts "Success #{res}"
-          record_qa '', comment, answer 
+          record_qa '', comment, answer
         else
           puts "Failed #{res}" if res.code != '302'
         end
       end
     end
-    
+
     def write_qa_to_db
       while qa = @qa.shift
         p qa
@@ -268,7 +356,7 @@ module WeiboSimi
         new_qa = { id: id, question: question, answer: answer }
         @qa << new_qa
       end
-    
+
       def answer_question(question)
         answer = Xiaohuangji.chat question.strip
         answer = answer_question_in_db question if answer.nil?
@@ -281,8 +369,8 @@ module WeiboSimi
         create table qa (
           id varchar(10),
           question varchar(30) not null,
-          answer varchar(30) not null                        
-          )
+          answer varchar(30) not null
+        )
         SQL
       end
 
@@ -294,18 +382,18 @@ module WeiboSimi
       def get_weibo_id(url)
         URI.parse(url).path[9..-1]
       end
-      
+
       # For checking at messages
       def has_url_in_db?(url)
         id = get_weibo_id url
-        sql = 'select * from qa where id="%s"' % id
-        !@db.execute(sql).empty?
+        res = @db.execute 'select * from qa where id=?', id
+        !res.empty?
       end
 
       def answer_question_in_db(question)
         puts 'Same question exists in db.'
-        sql = 'select answer from qa where question="%s"' % question
-        answers = @db.execute(sql).map { |a| a[0] }
+        res = @db.execute 'select answer from qa where question=?', question
+        answers = res.map { |a| a[0] }
         answers.compact.shuffle.first
       end
 
