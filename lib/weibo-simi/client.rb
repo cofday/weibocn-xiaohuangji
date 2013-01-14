@@ -137,9 +137,15 @@ module WeiboSimi
           end
           doc = Nokogiri::HTML res, nil, 'utf-8'
           content = doc.xpath('//span[@class="ctt"]').first
+          re_at = doc.xpath('//span[starts-with(text(),"转发理由:")]').first
           question = ''
-          content.children.each { |c| question += c.content if c.is_a? Nokogiri::XML::Text }
-          question = question[1..-1] if question.start_with? ':'
+          if re_at.nil?
+            content.children.each { |c| question += c.content if c.is_a? Nokogiri::XML::Text }
+			question = question[1..-1] if question.start_with? ':'
+          else
+            content = re_at.next
+			question = content.content
+          end
           puts "Question #{question.encoding} :::: '#{question.strip}'"
           answer = Xiaohuangji.chat question.strip
           answer = answer_question_in_db question if answer.nil?
@@ -255,7 +261,7 @@ module WeiboSimi
           puts '****** Request Timeout ******'
           retry
         end
-        
+
         if res.code == '302'
           puts "Success #{res}"
           record_qa '', comment, answer
