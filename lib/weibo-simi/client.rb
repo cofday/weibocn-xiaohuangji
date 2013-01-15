@@ -97,7 +97,7 @@ module WeiboSimi
         @weibo_uid = res.cookies['_WEIBO_UID']
         @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
         res
-      rescue RestClient::RequestTimeout => e
+      rescue Exception => e
         puts '****** Request Timeout ******'
         puts e.class
         #puts e.backtrace
@@ -112,7 +112,7 @@ module WeiboSimi
       res = nil
       begin
         at_res = RestClient.get at_url, @headers
-      rescue RestClient::RequestTimeout => e
+      rescue Exception => e
         puts '****** Request Timeout ******'
         puts e.class
         #puts e.backtrace
@@ -128,7 +128,7 @@ module WeiboSimi
           res = nil
           begin
             res = RestClient.get url, @headers
-          rescue RestClient::RequestTimeout => e
+          rescue Exception => e
             puts '****** Request Timeout ******'
             puts e.class
             #puts e.backtrace
@@ -175,7 +175,7 @@ module WeiboSimi
             res = Net::HTTP.start(uri.hostname, uri.port) do |http|
               http.request req
             end
-          rescue Timeout::Error => e
+          rescue Exception => e
             puts '****** Request Timeout ******'
             puts e.class
             #puts e.backtrace
@@ -199,7 +199,7 @@ module WeiboSimi
       res = nil
       begin
         res = RestClient.get comment_url, @headers
-      rescue RestClient::RequestTimeout => e
+      rescue Exception => e
         puts '****** Request Timeout ******'
         puts e.class
         #puts e.backtrace
@@ -225,7 +225,7 @@ module WeiboSimi
         res = nil
         begin
           res = RestClient.get reply_url, @headers
-        rescue RestClient::RequestTimeout => e
+        rescue Exception => e
           puts '****** Request Timeout ******'
           puts e.class
           #puts e.backtrace
@@ -254,14 +254,14 @@ module WeiboSimi
           res = Net::HTTP.start(uri.hostname, uri.port) do |http|
             http.request req
           end
-        rescue RestClient::RequestTimeout => e
+        rescue Exception => e
           puts '****** Request Timeout ******'
           puts e.class
           #puts e.backtrace
           puts '****** Request Timeout ******'
           retry
         end
-
+        
         if res.code == '302'
           puts "Success #{res}"
           record_qa '', comment, answer
@@ -277,7 +277,7 @@ module WeiboSimi
       res = nil
       begin
         res = RestClient.get comment_url, @headers
-        rescue RestClient::RequestTimeout => e
+      rescue Exception => e
         puts '****** Request Timeout ******'
         puts e.class
         #puts e.backtrace
@@ -305,7 +305,7 @@ module WeiboSimi
         res = nil
         begin
           res = RestClient.get reply_url, @headers
-        rescue RestClient::RequestTimeout => e
+        rescue Exception => e
           puts '****** Request Timeout ******'
           puts e.class
           #puts e.backtrace
@@ -334,7 +334,7 @@ module WeiboSimi
           res = Net::HTTP.start(uri.hostname, uri.port) do |http|
             http.request req
           end
-        rescue RestClient::RequestTimeout => e
+        rescue Exception => e
           puts '****** Request Timeout ******'
           puts e.class
           #puts e.backtrace
