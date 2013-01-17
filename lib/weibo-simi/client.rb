@@ -106,6 +106,8 @@ module WeiboSimi
       end
     end
 
+    # Use database to record the id of each @, which is inefficient.
+    # Should analyze the html and find the '[New]' span element as a new @.
     def reply_to_at
       at_url = 'http://weibo.cn/at/weibo'
       @headers[:cookie] = "gsid_CTandWM=#{@gsid_CTandWM}; _WEIBO_UID=#{@weibo_uid}"
@@ -141,10 +143,10 @@ module WeiboSimi
           question = ''
           if re_at.nil?
             content.children.each { |c| question += c.content if c.is_a? Nokogiri::XML::Text }
-			question = question[1..-1] if question.start_with? ':'
+            question = question[1..-1] if question.start_with? ':'
           else
             content = re_at.next
-			question = content.content
+            question = content.content
           end
           puts "Question #{question.encoding} :::: '#{question.strip}'"
           answer = Xiaohuangji.chat question.strip
@@ -385,11 +387,13 @@ module WeiboSimi
       end
 
       # For checking at messages
+      # Old and inefficient
       def get_weibo_id(url)
         URI.parse(url).path[9..-1]
       end
 
       # For checking at messages
+      # Old and inefficient
       def has_url_in_db?(url)
         id = get_weibo_id url
         res = @db.execute 'select * from qa where id=?', id
