@@ -22,4 +22,6 @@ f.reply_to_at
 ### Contribute
 Just fork and pull request.
 
+This project use rest-client and Net::HTTP at the same time since I'm not so familiar with rest-client but want to try it in this project. It's awkward and I hope some one can fix it.
+
 
